@@ -1,22 +1,20 @@
 const std = @import("std");
 const linux = std.os.linux;
 
-pub fn getchar() !?u8 {
+pub fn getchar() ?u8 {
     var byte: [1]u8 = undefined;
 
     const result = linux.read(0, &byte, 1);
 
     if (result == 1) return byte[0];
-    if (result == 0) return null;
-    return error.ReadFailed;
+    return null;
 }
 
-pub fn putchar(c:u8) !void {
-    const result = linux.write(1, @ptrCast(&c), 1);
-    if (result == 0) return error.WriteFailed;
+pub fn putchar(c:u8) usize {
+    return linux.write(1, @ptrCast(&c), 1);
 }
 
-pub fn print(fmt:[]const u8, args:anytype) !void {
+pub fn print(fmt:[]const u8, args:anytype) usize {
     var arg_index:usize = 0;
     var in_field:bool = false;
     var specifier:u8 = undefined;
@@ -34,10 +32,10 @@ pub fn print(fmt:[]const u8, args:anytype) !void {
                     // do something
                     switch (specifier) {
                         'd' => {
-                            try print_int(arg);
+                            return print_int(arg);
                         },
                         'c' => {
-                            try putchar(arg);
+                            return putchar(arg);
                         },
                         'f' => {
                             // print argument as a float
@@ -46,7 +44,7 @@ pub fn print(fmt:[]const u8, args:anytype) !void {
                             // print argument as a string
                         },
                         else => {
-                            return error.InvalidSpecifier;
+                            return 0;
                         },
                     }
                     arg_index+=1;
@@ -59,7 +57,7 @@ pub fn print(fmt:[]const u8, args:anytype) !void {
         if (in_field) {
             specifier = c;
         } else {
-            try putchar(c);
+            return putchar(c);
         }
     }
 }
@@ -78,14 +76,13 @@ fn int_to_string(int:i32) [32]u8 {
     }
     return string;
 }
-fn print_int(int:anytype) !void {
+pub fn print_int(int:anytype) usize {
     var buf:[32]u8 = undefined;
     var i = buf.len;
     switch(@typeInfo(@TypeOf(int))) {
         .int => |info| {
             if (int == 0) {
-                _ = linux.write(1, "0", 1);
-                return;
+                return linux.write(1, "0", 1);
             }
             if (info.signedness == .signed) {
                 var x:u64 = if (int < 0) @abs(int) else @intCast(int);
@@ -97,7 +94,7 @@ fn print_int(int:anytype) !void {
                 }
                 i-=1;
                 buf[i] = '-';
-                _ = linux.write(1, @ptrCast(&buf[i]), buf.len - i);
+                return linux.write(1, @ptrCast(&buf[i]), buf.len - i);
             } else {
                 var x = int;
                 while (x > 0) {
@@ -105,21 +102,21 @@ fn print_int(int:anytype) !void {
                     buf[i] = '0' + @as(u8, @intCast(x % 10));
                     x /= 10;
                 }
-                _ = linux.write(1, @ptrCast(&buf[i]), buf.len - i);
+                return linux.write(1, @ptrCast(&buf[i]), buf.len - i);
             }
         },
         .comptime_int => {
             if (int < 0) {
-                try print_int(@as(i64, int));
+                return print_int(@as(i64, int));
             } else {
-                try print_int(@as(u64, int));
+                return print_int(@as(u64, int));
             }
         },
         .bool => {
             if (int) {
-                try putchar('1');
+                return putchar('1');
             } else {
-                try putchar('0');
+                return putchar('0');
             }
         },
         else => unreachable
