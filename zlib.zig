@@ -10,73 +10,55 @@ pub fn getchar() ?u8 {
     return null;
 }
 
-pub fn putchar(c:u8) usize {
+pub fn putchar(char:usize) usize {
+    // make this function accept anytype of integer and convert to u8 if compatible.
+    if (char > 255) {
+        @panic("char must be a u8 compatible integer");
+    }
+    var c:u8 = @intCast(char);
     return linux.write(1, @ptrCast(&c), 1);
 }
 
-pub fn print(fmt:[]const u8, args:anytype) usize {
-    var arg_index:usize = 0;
-    var in_field:bool = false;
-    var specifier:u8 = undefined;
+pub fn printf(comptime fmt: []const u8, args: anytype) usize {
+    var result: usize = 0;
+    comptime var arg_index: usize = 0;
+    comptime var i: usize = 0;
 
-    for (fmt) |c| {
-        if (c == '{') {
-            in_field = true;
-            continue;
-        }
-        if (c == '}') {
-            in_field = false;
+    inline while (i < fmt.len) : (i += 1) {
+        if (fmt[i] == '{') {
+            i += 1;
+            if (i >= fmt.len) @compileError("unclosed '{'");
+            const specifier = fmt[i];
+            i += 1;
+            if (i >= fmt.len or fmt[i] != '}') @compileError("expected '}' after format specifier");
 
-            inline for (args, 0..) |arg, i| {
-                if (i == arg_index) {
-                    // do something
-                    switch (specifier) {
-                        'd' => {
-                            return print_int(arg);
-                        },
-                        'c' => {
-                            return putchar(arg);
-                        },
-                        'f' => {
-                            // print argument as a float
-                        },
-                        's' => {
-                            // print argument as a string
-                        },
-                        else => {
-                            return 0;
-                        },
-                    }
-                    arg_index+=1;
-                    break;
-                }
+            // arg_index is comptime, so this selects the exact field type
+            const arg = args[arg_index];
+            switch (specifier) {
+                'd' => result = print_int(arg),
+                'c' => result = putchar(arg),
+                'f' => {
+                    // print argument as a float
+                },
+                's' => {
+                    result = print_str(arg);
+                },
+                else => @compileError("unsupported format specifier"),
             }
+            arg_index += 1;
             continue;
         }
-
-        if (in_field) {
-            specifier = c;
-        } else {
-            return putchar(c);
-        }
+        result = putchar(fmt[i]);
     }
+
+    // optional but useful
+    if (arg_index != args.len) {
+        @compileError("wrong number of arguments for format string");
+    }
+    return result;
 }
 
-fn int_to_string(int:i32) [32]u8 {
-    var string:[32]u8 = undefined;
-    if (int == 0) {
-        string[0] = '0';
-    }
-    var i = string.len;
-    var x = int;
-    while (x > 0) {
-        i -= 1;
-        string[i] = '0' + @as(u8, @intCast(@mod(x, 10)));
-        x = @divFloor(x, 10);
-    }
-    return string;
-}
-pub fn print_int(int:anytype) usize {
+fn print_int(int:anytype) usize {
     var buf:[32]u8 = undefined;
     var i = buf.len;
     switch(@typeInfo(@TypeOf(int))) {
@@ -92,8 +74,10 @@ pub fn print_int(int:anytype) usize {
                     buf[i] = '0' + @as(u8, @intCast(x % 10));
                     x /= 10;
                 }
-                i-=1;
-                buf[i] = '-';
+                if (int < 0) {
+                    i-=1;
+                    buf[i] = '-';
+                }
                 return linux.write(1, @ptrCast(&buf[i]), buf.len - i);
             } else {
                 var x = int;
@@ -121,4 +105,12 @@ pub fn print_int(int:anytype) usize {
         },
         else => unreachable
     }
+}
+fn print_str(str:[]const u8) usize {
+    var result:usize = 0;
+    for(str) |char| {
+        result = putchar(char);
+        if (@as(isize, @bitCast(result)) < 0) return 1;
+    }
+    return 0;
 }
