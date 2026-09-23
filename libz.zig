@@ -1,5 +1,7 @@
 const std = @import("std");
 const linux = std.os.linux;
+const stack = @import("stack.zig");
+pub const Stack = stack.Stack;
 
 pub fn getchar() ?u8 {
     var byte: [1]u8 = undefined;
