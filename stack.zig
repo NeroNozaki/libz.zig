@@ -1,53 +1,47 @@
 const std = @import("std");
-const gpa = std.mem.Allocator;
+const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
 
 pub fn Stack(comptime T: type) type {
     return struct {
         const Self = @This();
+        allocator:Allocator,
         capacity:usize,
         size:usize,
         elems:[]T,
 
-        fn push(element:T) void {
-            if (Self.capacity == Self.size) {
-                Self.capacity *= 2;
-                if (Self.capacity < 16) Self.capacity = 16;
-                Self.elems = gpa.realloc(gpa, Self.elems, Self.size * @sizeOf(T));
+        pub fn push(self: *Self, element:T) void {
+            if (self.size == self.capacity) {
+                self.capacity *= 2;
+                if (self.capacity < 16) self.capacity = 16;
             }
-            Self.size+=1;
-            Self.elems[Self.size]=element;
+            if(!self.allocator.resize(self.elems, self.capacity))
+                self.elems = self.allocator.realloc(self.elems, self.capacity) catch @panic("out of memory, i think.");
+            self.elems[self.size]=element;
+            self.size+=1;
         }
-        fn pop() type {
-            if (Self.size > 0) {
-                defer Self.size-=1;
-                return Self.elems[Self.size];
-            }
-            unreachable;
+        pub fn pop(self: *Self) T {
+            assert(self.size > 0);
+            self.size-=1;
+            return self.elems[self.size];
         }
-        fn empty() bool {
-            return !Self.size;
+        pub fn empty(self: *Self) bool {
+            return !self.size;
         }
 
-        fn init() void {
-            Self.elems = gpa.alloc(gpa, T, @sizeOf(T));
+        pub fn init(allocator:Allocator) Self {
+            return .{
+                .allocator = allocator,
+                .capacity = @sizeOf(T),
+                .size = 0,
+                .elems = &[_]T{},
+            };
+        }
+
+        pub fn deinit(self: *Self) void {
+            self.allocator.free(self.elems);
+            self.* = undefined;
         }
     };
 }
 
-// fn void Stack.push(Stack* this, Type element) {
-// if (this.capacity == this.size) {
-// this.capacity *= 2;
-// if (this.capacity < 16) this.capacity = 16;
-// this.elems = realloc(this.elems, Type.sizeof * this.capacity);
-// }
-// this.elems[this.size++] = element;
-// }
-
-// fn Type Stack.pop(Stack* this) {
-// assert(this.size > 0);
-// return this.elems[--this.size];
-// }
-
-// fn bool Stack.empty(Stack* this) {
-// return !this.size;
-// }
